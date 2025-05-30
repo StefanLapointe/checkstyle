@@ -1234,6 +1234,11 @@ public class XpathMapperTest extends AbstractModuleTestSupport {
                 .isEqualTo(expected);
     }
 
+    /**
+     * This test exists to make sure that a stack overflow can't happen when
+     * calling getXpathItems with deeply concatenated strings (issue #9267).
+     * It takes a very long time to run but there's no way around it.
+     */
     @Test
     public void testManyNestedNodes() throws Exception {
         final String xpath = "//STRING_LITERAL";

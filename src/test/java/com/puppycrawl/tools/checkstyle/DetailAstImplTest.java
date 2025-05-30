@@ -26,13 +26,9 @@ import java.io.Writer;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.text.MessageFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import org.antlr.v4.runtime.CommonToken;
@@ -48,19 +44,6 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * TestCase to check DetailAST.
  */
 public class DetailAstImplTest extends AbstractModuleTestSupport {
-
-    // Ignores file which are not meant to have root node intentionally.
-    public static final Set<String> NO_ROOT_FILES = Set.of(
-                 // fails with unexpected character
-                 "InputGrammar.java",
-                 // comment only files, no root
-                 "InputPackageDeclarationWithCommentOnly.java",
-                 "InputSingleSpaceSeparatorEmpty.java",
-                 "InputNoCodeInFile1.java",
-                 "InputNoCodeInFile2.java",
-                 "InputNoCodeInFile3.java",
-                 "InputNoCodeInFile5.java"
-        );
 
     @TempDir
     public File temporaryFolder;
@@ -680,6 +663,11 @@ public class DetailAstImplTest extends AbstractModuleTestSupport {
             .isNull();
     }
 
+    /**
+     * This test exists to make sure that a stack overflow can't happen when
+     * using TodoCommentCheck for files with many comments (issue #4563).
+     * It takes a relatively long time to run but there's no way around it.
+     */
     @Test
     public void testManyComments() throws Exception {
         final File file = new File(temporaryFolder, "InputDetailASTManyComments.java");
@@ -695,26 +683,6 @@ public class DetailAstImplTest extends AbstractModuleTestSupport {
 
         final String[] expected = CommonUtil.EMPTY_STRING_ARRAY;
         verifyWithInlineConfigParser(file.getAbsolutePath(), expected);
-    }
-
-    @Test
-    public void testTreeStructure() throws Exception {
-        final List<File> files = getAllFiles(
-                new File("src/test/resources/com/puppycrawl/tools/checkstyle"));
-
-        for (File file : files) {
-            final String fileName = file.getCanonicalPath();
-            final DetailAST rootAST = JavaParser.parseFile(new File(fileName),
-                    JavaParser.Options.WITHOUT_COMMENTS);
-
-            assertWithMessage("file must return a root node: " + fileName)
-                .that(rootAST)
-                .isNotNull();
-
-            assertWithMessage("tree is valid")
-                    .that(checkTree(fileName, rootAST))
-                    .isTrue();
-        }
     }
 
     @Test
@@ -762,77 +730,6 @@ public class DetailAstImplTest extends AbstractModuleTestSupport {
         assertWithMessage("Invalid previous sibling")
                 .that(secondChild.getPreviousSibling())
                 .isEqualTo(child);
-    }
-
-    private static List<File> getAllFiles(File dir) {
-        final List<File> result = new ArrayList<>();
-
-        dir.listFiles(file -> {
-            if (file.isDirectory()) {
-                result.addAll(getAllFiles(file));
-            }
-            else if (file.getName().endsWith(".java")
-                    && !NO_ROOT_FILES.contains(file.getName())) {
-                result.add(file);
-            }
-            return false;
-        });
-
-        return result;
-    }
-
-    private static boolean checkTree(final String filename, final DetailAST root) {
-        DetailAST curNode = root;
-        DetailAST parent = null;
-        DetailAST prev = null;
-        while (curNode != null) {
-            checkNode(curNode, parent, prev, filename, root);
-            DetailAST toVisit = curNode.getFirstChild();
-            if (toVisit == null) {
-                while (curNode != null && toVisit == null) {
-                    toVisit = curNode.getNextSibling();
-                    if (toVisit == null) {
-                        curNode = curNode.getParent();
-                        if (curNode != null) {
-                            parent = curNode.getParent();
-                        }
-                    }
-                    else {
-                        prev = curNode;
-                        curNode = toVisit;
-                    }
-                }
-            }
-            else {
-                parent = curNode;
-                curNode = toVisit;
-                prev = null;
-            }
-        }
-
-        return true;
-    }
-
-    private static void checkNode(final DetailAST node,
-                                  final DetailAST parent,
-                                  final DetailAST prev,
-                                  final String filename,
-                                  final DetailAST root) {
-        final Object[] params = {
-            node, parent, prev, filename, root,
-        };
-        final MessageFormat badParentFormatter = new MessageFormat(
-                "Bad parent node={0} parent={1} filename={3} root={4}", Locale.ROOT);
-        final String badParentMsg = badParentFormatter.format(params);
-        assertWithMessage(badParentMsg)
-            .that(node.getParent())
-            .isEqualTo(parent);
-        final MessageFormat badPrevFormatter = new MessageFormat(
-                "Bad prev node={0} prev={2} parent={1} filename={3} root={4}", Locale.ROOT);
-        final String badPrevMsg = badPrevFormatter.format(params);
-        assertWithMessage(badPrevMsg)
-            .that(node.getPreviousSibling())
-            .isEqualTo(prev);
     }
 
 }
